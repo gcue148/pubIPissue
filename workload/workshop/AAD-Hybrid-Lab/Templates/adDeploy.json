@@ -4,21 +4,29 @@
   "parameters": {
     "adIP": {
       "type": "string",
-      "metadata": { "description": "The IP Addresses assigned to the domain controllers (a, b). Remember the first IP in a subnet is .4 e.g. 10.0.0.0/16 reserves 10.0.0.0-3. Specify one IP per server - must match numberofVMInstances or deployment will fail.s" },
+      "metadata": {
+        "description": "The IP Addresses assigned to the domain controllers (a, b). Remember the first IP in a subnet is .4 e.g. 10.0.0.0/16 reserves 10.0.0.0-3. Specify one IP per server - must match numberofVMInstances or deployment will fail.s"
+      },
       "defaultValue": "10.0.1.4"
     },
     "adminPassword": {
       "type": "securestring",
-      "metadata": { "description": "Admin password" }
+      "metadata": {
+        "description": "Admin password"
+      }
     },
     "adminUsername": {
       "type": "string",
-      "metadata": { "description": "Admin username" }
+      "metadata": {
+        "description": "Admin username"
+      }
     },
     "deploymentNumber": {
       "type": "string",
       "defaultValue": "1",
-      "metadata": { "description": "When deploying the stack N times, define the instance - this will be appended to some resource names to avoid collisions." }
+      "metadata": {
+        "description": "When deploying the stack N times, define the instance - this will be appended to some resource names to avoid collisions."
+      }
     },
     "adSubnetName": {
       "type": "string",
@@ -30,12 +38,16 @@
     },
     "location": {
       "type": "string",
-      "metadata": { "Description": "The region to deploy the resources into" }
+      "metadata": {
+        "Description": "The region to deploy the resources into"
+      }
     },
     "NetworkInterfaceName": {
       "type": "string",
       "defaultValue": "NIC",
-      "metadata": { "description": "This is the prefix name of the Network interfaces" }
+      "metadata": {
+        "description": "This is the prefix name of the Network interfaces"
+      }
     },
     "virtualNetworkName": {
       "type": "string",
@@ -44,7 +56,9 @@
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_D2s_v4",
-      "metadata": { "description": "This is the allowed list of VM sizes" }
+      "metadata": {
+        "description": "This is the allowed list of VM sizes"
+      }
     }
   },
   "variables": {
@@ -54,32 +68,59 @@
     "imageSKU": "2019-Datacenter",
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
     "adPubIPName": "[concat('adPubIP', parameters('deploymentNumber'))]",
-    "adNicName": "[concat('ad-',parameters('NetworkInterfaceName'), parameters('deploymentNumber'))]"
+    "adNicName": "[concat('ad-',parameters('NetworkInterfaceName'), parameters('deploymentNumber'))]",
+    "adNsgName": "[concat('nsg-', parameters('adVMName'))]"
   },
   "resources": [
     {
-      "name": "[variables('adPubIPName')]",
       "type": "Microsoft.Network/publicIPAddresses",
-      "location": "[parameters('location')]",
       "apiVersion": "2019-12-01",
+      "name": "[variables('adPubIPName')]",
+      "location": "[parameters('location')]",
       "tags": {
         "displayName": "adPubIP"
       },
+      "sku": {
+        "name": "Standard"
+      },
       "properties": {
-        "publicIPAllocationMethod": "Dynamic",
-        "sku": {
-          "name": "Standard"
-        }
+        "publicIPAllocationMethod": "Static"
       }
     },
     {
-      "apiVersion": "2019-12-01",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('adNsgName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "Allow-RDP",
+            "properties": {
+              "priority": 1000,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389"
+            }
+          }
+        ]
+      }
+    },
+    {
       "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2019-12-01",
       "name": "[variables('adNicName')]",
       "location": "[parameters('location')]",
-      "tags": { "displayName": "adNIC" },
+      "tags": {
+        "displayName": "adNIC"
+      },
       "dependsOn": [
-        "[resourceId('Microsoft.Network/publicIPAddresses', variables('adPubIPName'))]"
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('adPubIPName'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('adNsgName'))]"
       ],
       "properties": {
         "ipConfigurations": [
@@ -87,24 +128,29 @@
             "name": "[concat('ipconfig', parameters('deploymentNumber'))]",
             "properties": {
               "privateIPAllocationMethod": "Static",
+              "privateIPAddress": "[parameters('adIP')]",
               "subnet": {
                 "id": "[variables('adSubnetID')]"
               },
-              "privateIPAddress": "[parameters('adIP')]",
               "publicIPAddress": {
                 "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('adPubIPName'))]"
               }
             }
           }
-        ]
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('adNsgName'))]"
+        }
       }
     },
     {
-      "apiVersion": "2019-07-01",
       "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2019-07-01",
       "name": "[parameters('adVMName')]",
       "location": "[parameters('location')]",
-      "tags": { "displayName": "adVM" },
+      "tags": {
+        "displayName": "adVM"
+      },
       "dependsOn": [
         "[concat('Microsoft.Network/networkInterfaces/', variables('adNicName'))]"
       ],
@@ -132,14 +178,12 @@
         "networkProfile": {
           "networkInterfaces": [
             {
-              "id": "[resourceid('Microsoft.Network/networkInterfaces', variables('adNicName'))]"
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('adNicName'))]"
             }
           ]
         }
       }
     }
   ],
-  "outputs": {
-    
-  }
+  "outputs": {}
 }
